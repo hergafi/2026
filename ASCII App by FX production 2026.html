@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ASCII Motion Studio | FX Production 2026</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg:#ffffff; --surface:#f5f5f7; --border:#d2d2d7;
+    --text:#1d1d1f; --text-muted:#86868b; --accent:#0071e3; --accent-hover:#0077ed;
+  }
+  [data-theme="dark"] {
+    --bg:#000000; --surface:#161617; --border:#38383a;
+    --text:#f5f5f7; --text-muted:#86868b; --accent:#0a84ff; --accent-hover:#409cff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;outline:none;transition:background-color .25s ease,color .25s ease,border-color .25s ease}
+  body{background-color:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+
+  .workspace{flex:1;display:flex;align-items:center;justify-content:center;padding:32px;position:relative;overflow:auto}
+  .placeholder{position:absolute;display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--text-muted);font-size:14px;font-weight:500;pointer-events:none}
+  .placeholder svg{width:48px;height:48px;stroke:var(--text-muted);stroke-width:1.5;fill:none}
+
+  #output{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre;line-height:1;font-size:10px;display:none;direction:ltr;text-align:left;user-select:all}
+
+  #live-badge{position:absolute;top:20px;inset-inline-start:24px;display:none;align-items:center;gap:6px;color:#ff3b30;font-size:11px;font-weight:700;letter-spacing:2px;z-index:15}
+  #live-badge .dot{width:8px;height:8px;border-radius:50%;background:#ff3b30;animation:blink 1s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+  .toolbar{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:8px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.2);z-index:10;max-width:calc(100% - 32px);overflow-x:auto;scrollbar-width:none}
+  .toolbar::-webkit-scrollbar{display:none}
+
+  .tool-item{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);padding:6px 10px;border-radius:12px;flex-shrink:0}
+  .tool-item svg{width:16px;height:16px;stroke:var(--text-muted);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+  button,label.icon-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+  button svg,label.icon-btn svg{width:18px;height:18px;stroke:var(--text);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  button:hover,label.icon-btn:hover{background:var(--border)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary svg{stroke:#fff}
+  button.primary:hover{background:var(--accent-hover)}
+
+  button.live-active{background:#ff3b30;border-color:#ff3b30;color:#fff;animation:pulse 1.6s infinite}
+  button.live-active svg{stroke:#fff}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,48,.5)}70%{box-shadow:0 0 0 10px rgba(255,59,48,0)}100%{box-shadow:0 0 0 0 rgba(255,59,48,0)}}
+
+  input[type="file"]{display:none}
+  input[type="color"]{border:none;width:22px;height:22px;border-radius:6px;cursor:pointer;background:transparent}
+  input[type="range"]{accent-color:var(--accent);width:60px;height:4px}
+  select{background:transparent;color:var(--text);border:none;outline:none;font-size:13px;font-weight:500;cursor:pointer}
+  select option{background:var(--surface);color:var(--text)}
+
+  #progress-container{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);width:220px;height:4px;background:var(--border);border-radius:2px;display:none;overflow:hidden;z-index:20}
+  #progress-bar{height:100%;width:0%;background:var(--accent);transition:width .15s}
+</style>
+</head>
+<body>
+
+  <div class="workspace" id="drop-zone">
+    <div class="placeholder" id="placeholder-text">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <div id="live-badge"><span class="dot"></span>LIVE</div>
+    <div id="output"></div>
+  </div>
+
+  <div id="progress-container"><div id="progress-bar"></div></div>
+
+  <div class="toolbar">
+    <label class="icon-btn" title="رفع صورة">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <input type="file" id="file-input" accept="image/*">
+    </label>
+
+    <button id="btn-live" title="كاميرا مباشرة — Live Motion">
+      <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+    </button>
+
+    <button id="btn-theme" title="تغيير المظهر">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+
+    <div class="tool-item" title="الدقة (Scale)">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      <input type="range" id="resolution" min="50" max="250" value="130">
+    </div>
+
+    <div class="tool-item" title="التباين">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2v20"/><path d="M12 2a10 10 0 0 1 0 20" fill="currentColor" opacity="0.3"/></svg>
+      <input type="range" id="contrast" min="0.1" max="5.0" step="0.1" value="1.5">
+    </div>
+
+    <div class="tool-item" title="نمط الرموز">
+      <svg viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+      <select id="char-set">
+        <option value="detailed">T1</option>
+        <option value="classic">T2</option>
+        <option value="minimal">T3</option>
+        <option value="blocks">T4</option>
+        <option value="math">T5</option>
+      </select>
+    </div>
+
+    <div class="tool-item" title="الألوان">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
+      <input type="color" id="text-color" value="#f5f5f7">
+      <input type="color" id="bg-color" value="#000000">
+    </div>
+
+    <div class="tool-item" title="صيغة التصدير">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <select id="export-format">
+        <option value="video">VIDEO 24fps ⚡</option>
+        <option value="png">PNG 4K</option>
+        <option value="jpg">JPG 4K</option>
+        <option value="pdf">PDF</option>
+      </select>
+    </div>
+
+    <button class="primary" id="btn-download" title="تحميل">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+  </div>
+
+<script>
+/* ============================================================
+   ASCII Motion Studio — FX Production 2026
+   FIXED: Static export now PRESERVES the configured scale
+   (same columns as preview) and upscales the FONT to fill 4K.
+   ============================================================ */
+const CHAR_SETS = {
+  detailed: " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+  classic:  " .:-=+*#%@$",
+  minimal:  " .:-#@",
+  blocks:   " ░▒▓█",
+  math:     " ·÷+-×±=≠≈∞∑∏√∫§"
+};
+
+const FPS = 24;
+const ANIM_COLUMNS = 100;
+const FRAMES = 48;
+const TARGET_WIDTH = 3840; // 4K UHD output width in pixels
+const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+let currentImg = null;
+let isLive = false, liveStream = null, liveVideo = null, liveRAF = null, lastLive = 0;
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- Luminance grid (Image OR Video, optional mirror) ---------- */
+function sampleGrid(src, w, contrastVal, mirror = false) {
+  const sw = src.videoWidth || src.naturalWidth || src.width;
+  const sh = src.videoHeight || src.naturalHeight || src.height;
+  if (!sw || !sh) return null;
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const h = Math.floor(w * (sh / sw) * 0.5);
+  c.width = w; c.height = h;
+  ctx.filter = `contrast(${contrastVal})`;
+  if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(src, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const grid = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const p = i * 4;
+    grid[i] = (d[p]*0.299 + d[p+1]*0.587 + d[p+2]*0.114) / 255;
+  }
+  return { grid, w, h };
+}
+
+function asciiFromGrid(g, density, setKey) {
+  const ch = CHAR_SETS[setKey] || CHAR_SETS.detailed;
+  const len = ch.length;
+  const rows = new Array(g.h);
+  for (let y = 0; y < g.h; y++) {
+    let row = '';
+    const off = y * g.w;
+    for (let x = 0; x < g.w; x++) {
+      let v = g.grid[off + x];
+      if (density !== null) v = Math.pow(v, density);
+      row += ch[Math.max(0, Math.min(len - 1, Math.floor(v * (len - 1))))];
+    }
+    rows[y] = row;
+  }
+  return rows.join('\n');
+}
+
+function paintAscii(ctx, W, H, text, textColor, bgColor, fontSize, pad, copyright) {
+  const lines = text.split('\n');
+  ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
+  ctx.font = `${fontSize}px ${MONO_FONT}`;
+  ctx.fillStyle = textColor; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], pad, pad + i * fontSize);
+  if (copyright) {
+    ctx.globalAlpha = 0.4;
+    const cFont = Math.max(12, Math.min(64, fontSize * 0.6));
+    ctx.font = `600 ${cFont}px -apple-system, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('© 2026 FX PRODUCTION', W / 2, H - pad / 2);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------- Still preview ---------- */
+const processImage = () => {
+  if (!currentImg || isLive) return;
+  const g = sampleGrid(currentImg, parseInt($('resolution').value), parseFloat($('contrast').value));
+  const out = $('output');
+  out.textContent = asciiFromGrid(g, null, $('char-set').value);
+  out.style.color = $('text-color').value;
+  out.style.display = 'block';
+  $('placeholder-text').style.display = 'none';
+};
+
+let rafId = null;
+const schedule = () => { if (rafId) cancelAnimationFrame(rafId); rafId = requestAnimationFrame(processImage); };
+$('resolution').addEventListener('input', schedule);
+$('contrast').addEventListener('input', schedule);
+$('char-set').addEventListener('change', processImage);
+$('text-color').addEventListener('input', () => { if (currentImg || isLive) $('output').style.color = $('text-color').value; });
+
+/* ---------- LIVE MOTION ---------- */
+$('btn-live').addEventListener('click', async () => {
+  if (isLive) { stopLive(); return; }
+  try {
+    liveVideo = document.createElement('video');
+    liveVideo.muted = true; liveVideo.playsInline = true; liveVideo.autoplay = true;
+    liveStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 } }, audio: false
+    });
+    liveVideo.srcObject = liveStream;
+    await liveVideo.play();
+    isLive = true;
+    $('btn-live').classList.add('live-active');
+    $('live-badge').style.display = 'flex';
+    $('placeholder-text').style.display = 'none';
+    lastLive = 0;
+    liveRAF = requestAnimationFrame(liveLoop);
+  } catch (err) {
+    console.error(err);
+    alert('تعذر الوصول إلى الكاميرا — تحقق من الأذونات');
+  }
+});
+
+function stopLive() {
+  isLive = false;
+  if (liveRAF) cancelAnimationFrame(liveRAF);
+  if (liveStream) liveStream.getTracks().forEach(t => t.stop());
+  $('btn-live').classList.remove('live-active');
+  $('live-badge').style.display = 'none';
+  if (currentImg) processImage();
+  else {
+    $('output').style.display = 'none';
+    $('placeholder-text').style.display = 'flex';
+  }
+}
+
+function liveLoop(ts) {
+  if (!isLive) return;
+  liveRAF = requestAnimationFrame(liveLoop);
+  if (ts - lastLive < 33) return;
+  lastLive = ts;
+  if (liveVideo.readyState >= 2) {
+    const g = sampleGrid(liveVideo, Math.min(160, parseInt($('resolution').value)), parseFloat($('contrast').value), true);
+    if (!g) return;
+    const out = $('output');
+    out.textContent = asciiFromGrid(g, null, $('char-set').value);
+    out.style.color = $('text-color').value;
+    out.style.display = 'block';
+  }
+}
+
+/* ---------- Theme / Upload / Drop ---------- */
+$('btn-theme').addEventListener('click', () => {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  if (isDark) { $('bg-color').value = '#ffffff'; $('text-color').value = '#1d1d1f'; }
+  else        { $('bg-color').value = '#000000'; $('text-color').value = '#f5f5f7'; }
+  if (isLive) $('output').style.color = $('text-color').value; else processImage();
+});
+
+const loadFile = f => {
+  if (!f || !f.type.startsWith('image/')) return;
+  if (isLive) stopLive();
+  const r = new FileReader();
+  r.onload = e => { const i = new Image(); i.onload = () => { currentImg = i; processImage(); }; i.src = e.target.result; };
+  r.readAsDataURL(f);
+};
+$('file-input').addEventListener('change', e => loadFile(e.target.files[0]));
+const dz = $('drop-zone');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.opacity = '.8'; }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.opacity = '1'; }));
+dz.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
+
+const showProgress = v => { $('progress-container').style.display = 'block'; $('progress-bar').style.width = v + '%'; };
+const hideProgress = () => { $('progress-bar').style.width = '0%'; $('progress-container').style.display = 'none'; };
+
+/* ---------- Recorder helper ---------- */
+function makeRecorder(canvas, onDone) {
+  let mime = 'video/webm;codecs=vp9';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/mp4';
+  const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+  const rec = new MediaRecorder(canvas.captureStream(FPS), { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => onDone(new Blob(chunks, { type: mime }), ext);
+  return rec;
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ---------- VIDEO: density sweep (still) ---------- */
+async function exportSweepVideo() {
+  const g = sampleGrid(currentImg, ANIM_COLUMNS, parseFloat($('contrast').value));
+  const tc = $('text-color').value, bg = $('bg-color').value;
+  const fontSize = 14, pad = 60;
+  const W = Math.ceil(g.w * fontSize * 0.6) + pad * 2;
+  const H = g.h * fontSize + pad * 2 + 40;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-MOTION.${ext}`));
+  paintAscii(ctx, W, H, asciiFromGrid(g, 1, $('char-set').value), tc, bg, fontSize, pad, true);
+  rec.start();
+
+  for (let i = 0; i < FRAMES; i++) {
+    const t = i / (FRAMES - 1);
+    const pp = t < .5 ? t * 2 : 2 - t * 2;
+    paintAscii(ctx, W, H, asciiFromGrid(g, 0.5 + pp * 2.5, $('char-set').value), tc, bg, fontSize, pad, true);
+    showProgress(Math.round(((i + 1) / FRAMES) * 100));
+    await sleep(1000 / FPS);
+  }
+  rec.stop();
+  await new Promise(r => setTimeout(r, 300));
+}
+
+/* ---------- VIDEO: live camera (3s) ---------- */
+async function exportLiveVideo() {
+  const tc = $('text-color').value, bg = $('bg-color').value;
+  const con = parseFloat($('contrast').value), set = $('char-set').value;
+  const cols = ANIM_COLUMNS;
+  const sw = liveVideo.videoWidth, sh = liveVideo.videoHeight;
+  const rows = Math.floor(cols * (sh / sw) * 0.5);
+  const fontSize = 14, pad = 60;
+  const W = Math.ceil(cols * fontSize * 0.6) + pad * 2;
+  const H = rows * fontSize + pad * 2 + 40;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  const total = FPS * 3;
+  const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-LIVE.${ext}`));
+  rec.start();
+
+  for (let i = 0; i < total; i++) {
+    const g = sampleGrid(liveVideo, cols, con, true);
+    if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true);
+    showProgress(Math.round(((i + 1) / total) * 100));
+    await sleep(1000 / FPS);
+  }
+  rec.stop();
+  await new Promise(r => setTimeout(r, 300));
+}
+
+/* ============================================================
+   ✅ FIXED STATIC EXPORT
+   Keeps the user-configured SCALE (columns from the slider)
+   and upscales the FONT so the artwork fills 3840px width.
+   Same art as preview — just printed at 4K.
+   ============================================================ */
+function exportStatic(format) {
+  const src = isLive ? liveVideo : currentImg;
+  const pad = 200;
+
+  // 1) Preserve configured scale exactly
+  const cols = parseInt($('resolution').value);
+  const g = sampleGrid(src, cols, parseFloat($('contrast').value), isLive);
+  if (!g) { alert('المصدر غير جاهز'); return; }
+  const text = asciiFromGrid(g, null, $('char-set').value);
+  const lines = text.split('\n');
+
+  // 2) Compute font size so this exact grid fills 4K width
+  const meas = document.createElement('canvas').getContext('2d');
+  const baseFont = 10;
+  meas.font = `${baseFont}px ${MONO_FONT}`;
+  const baseW = meas.measureText(lines[0]).width || 1;
+  const fontSize = Math.max(8, Math.floor(baseFont * (TARGET_WIDTH - pad * 2) / baseW));
+
+  // 3) Exact canvas dimensions at final font
+  meas.font = `${fontSize}px ${MONO_FONT}`;
+  const W = Math.ceil(meas.measureText(lines[0]).width) + pad * 2;
+  const H = Math.ceil(lines.length * fontSize) + pad * 2 + 80;
+
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  paintAscii(c.getContext('2d'), W, H, text,
+    $('text-color').value, $('bg-color').value, fontSize, pad, true);
+
+  if (format === 'pdf') {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: W > H ? 'l' : 'p', unit: 'px', format: [W, H], compress: true });
+    pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, W, H);
+    pdf.save('FX-PRODUCTION-ASCII.pdf');
+    return;
+  }
+
+  c.toBlob(blob => {
+    if (!blob) { alert('فشل التصدير'); return; }
+    saveBlob(blob, `FX-PRODUCTION-4K.${format}`);
+  }, format === 'jpg' ? 'image/jpeg' : 'image/png', 0.95);
+}
+
+/* ---------- Main handler ---------- */
+$('btn-download').addEventListener('click', async () => {
+  if (!currentImg && !isLive) return alert('⚠️ حمّل صورة أو شغّل الكاميرا أولاً');
+  const format = $('export-format').value;
+  const btn = $('btn-download');
+  btn.disabled = true;
+
+  try {
+    if (format === 'video') {
+      if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) {
+        alert('المتصفح لا يدعم تسجيل الفيديو');
+      } else if (isLive) await exportLiveVideo();
+      else await exportSweepVideo();
+    } else {
+      exportStatic(format);
+    }
+  } catch (err) { console.error(err); alert('حدث خطأ أثناء التصدير'); }
+
+  btn.disabled = false;
+  setTimeout(hideProgress, 800);
+});
+</script>
+</body>
+</html>
