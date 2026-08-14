@@ -153,10 +153,9 @@
       <div class="toggle-switch" id="edge-toggle"></div>
     </div>
 
-    <div class="tool-item" title="نمط الألوان">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
-      <div class="toggle-switch active" id="color-toggle"></div>
-    </div>
+    <button id="btn-fullcolor" title="تلوين كامل — Full Color Mode">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z"/><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2v4m0 12v4m10-10h-4M2 12H6m13.657-7.657l-2.829 2.829M7.172 16.828l-2.829 2.829m14.314 0l-2.829-2.829M7.172 7.172L4.343 4.343"/></svg>
+    </button>
 
     <div class="tool-item" title="نمط الرموز">
       <svg viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
@@ -213,7 +212,7 @@ let currentImg = null;
 let currentVideo = null;
 let isLive = false, liveStream = null, liveVideo = null, liveRAF = null, lastLive = 0;
 let videoPlaybackInterval = null;
-let useFullColor = true;
+let isFullColorActive = false; // Default: Monochrome mode
 let useEdgeDetection = false;
 
 const $ = id => document.getElementById(id);
@@ -349,7 +348,7 @@ const processSource = () => {
   $('placeholder-text').style.display = 'none';
   
   // Update mode indicator
-  $('mode-indicator').style.display = useFullColor ? 'flex' : 'none';
+  $('mode-indicator').style.display = isFullColorActive ? 'flex' : 'none';
 };
 
 let rafId = null;
@@ -361,10 +360,12 @@ $('brightness').addEventListener('input', schedule);
 $('gamma').addEventListener('input', schedule);
 $('char-set').addEventListener('change', processSource);
 
-// Color mode toggle - True Per-Pixel Color Mode
-$('color-toggle').addEventListener('click', function() {
-  this.classList.toggle('active');
-  useFullColor = this.classList.contains('active');
+// Full Color Mode Toggle - True Per-Pixel Color Mode
+$('btn-fullcolor').addEventListener('click', function() {
+  isFullColorActive = !isFullColorActive;
+  this.classList.toggle('active', isFullColorActive);
+  this.title = isFullColorActive ? 'تعطيل التلوين — Disable Color' : 'تلوين كامل — Full Color Mode';
+  // Force immediate redraw to reflect color change
   schedule();
 });
 
@@ -438,7 +439,7 @@ $('btn-theme').addEventListener('click', () => {
   html.setAttribute('data-theme', isDark ? 'light' : 'dark');
   if (isDark) { $('bg-color').value = '#ffffff'; $('text-color').value = '#1d1d1f'; }
   else        { $('bg-color').value = '#000000'; $('text-color').value = '#f5f5f7'; }
-  if (!useFullColor) {
+  if (!isFullColorActive) {
     if (isLive) $('output').style.color = $('text-color').value; else processSource();
   }
 });
@@ -705,7 +706,7 @@ function exportStatic(format) {
     // Use full color mode if enabled and RGB data available
     paintAscii(c.getContext('2d'), c.width, c.height, text,
       $('text-color').value, $('bg-color').value, fontSize, pad, true, 
-      useFullColor ? g : null, useFullColor);
+      isFullColorActive ? g : null, isFullColorActive);
 
     if (format === 'pdf') {
       if (typeof window.jspdf === 'undefined') {
@@ -731,7 +732,7 @@ function exportStatic(format) {
 /* ---------- Main Download Handler ---------- */
 $('btn-download').addEventListener('click', async () => {
   if ((!currentImg && !currentVideo && !isLive)) return alert('⚠️ حمّل صورة أو فيديو أو شغّل الكاميرا أولاً');
-  const format = $('export-format').value;
+  const format = $('export-format')?.value || 'png';
   const btn = $('btn-download');
   btn.disabled = true;
 
