@@ -62,7 +62,7 @@
   
   .tool-label{font-size:11px;color:var(--text-muted);font-weight:500;white-space:nowrap}
   
-  #video-preview{position:absolute;top:20px;right:20px;width:240px;border-radius:0;border:1px solid var(--border);display:none!important;z-index:5}
+  #video-preview{position:absolute;top:20px;right:20px;width:240px;border-radius:0;border:1px solid var(--border);display:none!important;visibility:hidden;opacity:0;z-index:5}
   
   .mode-indicator{position:absolute;top:20px;inset-inline-end:24px;display:none;align-items:center;gap:6px;color:var(--accent);font-size:11px;font-weight:700;z-index:15}
   .mode-indicator svg{width:14px;height:14px;stroke:var(--accent);stroke-width:2;fill:none}
@@ -321,12 +321,13 @@ function paintAscii(ctx, W, H, text, textColor, bgColor, fontSize, pad, copyrigh
   }
   
   if (copyright) {
-    ctx.globalAlpha = 0.4;
-    const cFont = Math.max(12, Math.min(64, fontSize * 0.6));
-    ctx.font = `600 ${cFont}px -apple-system, sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    // Add copyright watermark: © FX Production 2026 (Bottom-Right)
+    ctx.globalAlpha = 0.7;
+    const cFont = Math.max(14, Math.min(24, fontSize * 0.5));
+    ctx.font = `${cFont}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
     ctx.fillStyle = textColor;
-    ctx.fillText('© 2026 FX PRODUCTION', W / 2, H - pad / 2);
+    ctx.fillText('© FX Production 2026', W - pad + 20, H - pad / 2);
     ctx.globalAlpha = 1;
   }
 }
@@ -380,6 +381,8 @@ $('btn-live').addEventListener('click', async () => {
   stopVideoPlayback();
   try {
     liveVideo = document.createElement('video');
+    // Note: Camera audio requires user permission and is typically muted for privacy
+    // Volume slider controls virtual gain if needed in future implementation
     liveVideo.muted = true; liveVideo.playsInline = true; liveVideo.autoplay = true;
     liveStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 640 } }, audio: false
@@ -458,8 +461,8 @@ const loadVideo = f => {
   stopVideoPlayback();
   const video = $('video-preview');
   video.src = URL.createObjectURL(f);
-  video.muted = false; // Enable audio
-  video.style.display = 'block';
+  video.muted = false; // Enable audio for original video playback
+  video.style.display = 'none'; // Keep hidden - only show ASCII art
   video.onloadeddata = () => {
     currentVideo = video;
     currentImg = null;
@@ -542,154 +545,187 @@ function saveBlob(blob, name) {
 
 /* ---------- VIDEO Export: Density Sweep (Still Image) ---------- */
 async function exportSweepVideo() {
-  const src = currentImg;
-  const g = sampleGridAdvanced(src, ANIM_COLUMNS, parseFloat($('contrast').value), 
-    parseInt($('brightness').value), parseFloat($('gamma').value), useEdgeDetection);
-  const tc = $('text-color').value, bg = $('bg-color').value;
-  const fontSize = 14, pad = 60;
-  const W = Math.ceil(g.w * fontSize * 0.6) + pad * 2;
-  const H = g.h * fontSize + pad * 2 + 40;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
+  try {
+    const src = currentImg;
+    if (!src) throw new Error('No source image available');
+    const g = sampleGridAdvanced(src, ANIM_COLUMNS, parseFloat($('contrast').value), 
+      parseInt($('brightness').value), parseFloat($('gamma').value), useEdgeDetection);
+    if (!g) throw new Error('Failed to sample grid');
+    const tc = $('text-color').value, bg = $('bg-color').value;
+    const fontSize = 14, pad = 60;
+    const W = Math.ceil(g.w * fontSize * 0.6) + pad * 2;
+    const H = g.h * fontSize + pad * 2 + 40;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
 
-  const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-MOTION.${ext}`));
-  paintAscii(ctx, W, H, asciiFromGrid(g, 1, $('char-set').value), tc, bg, fontSize, pad, true, null, false);
-  rec.start();
+    const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-MOTION.${ext}`));
+    paintAscii(ctx, W, H, asciiFromGrid(g, 1, $('char-set').value), tc, bg, fontSize, pad, true, null, false);
+    rec.start();
 
-  for (let i = 0; i < FRAMES; i++) {
-    const t = i / (FRAMES - 1);
-    const pp = t < .5 ? t * 2 : 2 - t * 2;
-    paintAscii(ctx, W, H, asciiFromGrid(g, 0.5 + pp * 2.5, $('char-set').value), tc, bg, fontSize, pad, true, null, false);
-    showProgress(Math.round(((i + 1) / FRAMES) * 100));
-    await sleep(1000 / FPS);
+    for (let i = 0; i < FRAMES; i++) {
+      const t = i / (FRAMES - 1);
+      const pp = t < .5 ? t * 2 : 2 - t * 2;
+      paintAscii(ctx, W, H, asciiFromGrid(g, 0.5 + pp * 2.5, $('char-set').value), tc, bg, fontSize, pad, true, null, false);
+      showProgress(Math.round(((i + 1) / FRAMES) * 100));
+      await sleep(1000 / FPS);
+    }
+    rec.stop();
+    await new Promise(r => setTimeout(r, 300));
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
   }
-  rec.stop();
-  await new Promise(r => setTimeout(r, 300));
 }
 
 /* ---------- VIDEO Export: Live Camera (3s) ---------- */
 async function exportLiveVideo() {
-  const tc = $('text-color').value, bg = $('bg-color').value;
-  const con = parseFloat($('contrast').value), br = parseInt($('brightness').value), gm = parseFloat($('gamma').value);
-  const set = $('char-set').value;
-  const cols = ANIM_COLUMNS;
-  const sw = liveVideo.videoWidth, sh = liveVideo.videoHeight;
-  const rows = Math.floor(cols * (sh / sw) * 0.5);
-  const fontSize = 14, pad = 60;
-  const W = Math.ceil(cols * fontSize * 0.6) + pad * 2;
-  const H = rows * fontSize + pad * 2 + 40;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
+  try {
+    const tc = $('text-color').value, bg = $('bg-color').value;
+    const con = parseFloat($('contrast').value), br = parseInt($('brightness').value), gm = parseFloat($('gamma').value);
+    const set = $('char-set').value;
+    const cols = ANIM_COLUMNS;
+    const sw = liveVideo.videoWidth, sh = liveVideo.videoHeight;
+    const rows = Math.floor(cols * (sh / sw) * 0.5);
+    const fontSize = 14, pad = 60;
+    const W = Math.ceil(cols * fontSize * 0.6) + pad * 2;
+    const H = rows * fontSize + pad * 2 + 40;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
 
-  const total = FPS * 3;
-  const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-LIVE.${ext}`));
-  rec.start();
+    const total = FPS * 3;
+    const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-LIVE.${ext}`));
+    rec.start();
 
-  for (let i = 0; i < total; i++) {
-    const g = sampleGridAdvanced(liveVideo, cols, con, br, gm, useEdgeDetection, true);
-    if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, false);
-    showProgress(Math.round(((i + 1) / total) * 100));
-    await sleep(1000 / FPS);
+    for (let i = 0; i < total; i++) {
+      const g = sampleGridAdvanced(liveVideo, cols, con, br, gm, useEdgeDetection, true);
+      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, false);
+      showProgress(Math.round(((i + 1) / total) * 100));
+      await sleep(1000 / FPS);
+    }
+    rec.stop();
+    await new Promise(r => setTimeout(r, 300));
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
   }
-  rec.stop();
-  await new Promise(r => setTimeout(r, 300));
 }
 
 /* ---------- VIDEO Export: Uploaded Video Frames ---------- */
 async function exportVideoFile() {
-  if (!currentVideo) return;
-  const tc = $('text-color').value, bg = $('bg-color').value;
-  const con = parseFloat($('contrast').value), br = parseInt($('brightness').value), gm = parseFloat($('gamma').value);
-  const set = $('char-set').value;
-  const cols = ANIM_COLUMNS;
-  const video = currentVideo;
-  
-  // Get video dimensions
-  const sw = video.videoWidth, sh = video.videoHeight;
-  const rows = Math.floor(cols * (sh / sw) * 0.5);
-  const fontSize = 14, pad = 60;
-  const W = Math.ceil(cols * fontSize * 0.6) + pad * 2;
-  const H = rows * fontSize + pad * 2 + 40;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
-
-  const duration = video.duration * 1000;
-  const totalFrames = Math.min(Math.floor(duration / (1000 / FPS)), 300); // Cap at 300 frames or video length
-  const frameInterval = duration / totalFrames;
-  
-  const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-VIDEO.${ext}`));
-  rec.start();
-  
-  video.currentTime = 0;
-  video.pause();
-  
-  for (let i = 0; i < totalFrames; i++) {
-    video.currentTime = (i * frameInterval) / 1000;
-    await new Promise(resolve => {
-      const onSeeked = () => {
-        video.removeEventListener('seeked', onSeeked);
-        resolve();
-      };
-      video.addEventListener('seeked', onSeeked);
-    });
+  try {
+    if (!currentVideo) throw new Error('No video loaded');
+    const tc = $('text-color').value, bg = $('bg-color').value;
+    const con = parseFloat($('contrast').value), br = parseInt($('brightness').value), gm = parseFloat($('gamma').value);
+    const set = $('char-set').value;
+    const cols = ANIM_COLUMNS;
+    const video = currentVideo;
     
-    const g = sampleGridAdvanced(video, cols, con, br, gm, useEdgeDetection);
-    if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, false);
-    showProgress(Math.round(((i + 1) / totalFrames) * 100));
-    await sleep(1000 / FPS);
+    // Get video dimensions
+    const sw = video.videoWidth, sh = video.videoHeight;
+    const rows = Math.floor(cols * (sh / sw) * 0.5);
+    const fontSize = 14, pad = 60;
+    const W = Math.ceil(cols * fontSize * 0.6) + pad * 2;
+    const H = rows * fontSize + pad * 2 + 40;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+
+    const duration = video.duration * 1000;
+    const totalFrames = Math.min(Math.floor(duration / (1000 / FPS)), 300); // Cap at 300 frames or video length
+    const frameInterval = duration / totalFrames;
+    
+    const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-VIDEO.${ext}`));
+    rec.start();
+    
+    video.currentTime = 0;
+    video.pause();
+    
+    for (let i = 0; i < totalFrames; i++) {
+      video.currentTime = (i * frameInterval) / 1000;
+      await new Promise(resolve => {
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          resolve();
+        };
+        video.addEventListener('seeked', onSeeked);
+      });
+      
+      const g = sampleGridAdvanced(video, cols, con, br, gm, useEdgeDetection);
+      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, false);
+      showProgress(Math.round(((i + 1) / totalFrames) * 100));
+      await sleep(1000 / FPS);
+    }
+    
+    rec.stop();
+    await new Promise(r => setTimeout(r, 300));
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
   }
-  
-  rec.stop();
-  await new Promise(r => setTimeout(r, 300));
 }
 
 /* ============================================================
    STATIC EXPORT (PNG/JPG/PDF) - 4K Real with Full Color Support
    ============================================================ */
 function exportStatic(format) {
-  const src = isLive ? liveVideo : (currentVideo || currentImg);
-  const pad = 200;
+  try {
+    const src = isLive ? liveVideo : (currentVideo || currentImg);
+    if (!src) throw new Error('No source available');
+    const pad = 200;
 
-  const cols = parseInt($('resolution').value);
-  const g = sampleGridAdvanced(src, cols, parseFloat($('contrast').value), 
-    parseInt($('brightness').value), parseFloat($('gamma').value), useEdgeDetection, isLive);
-  if (!g) { alert('المصدر غير جاهز'); return; }
-  const text = asciiFromGrid(g, null, $('char-set').value);
-  const lines = text.split('\n');
+    const cols = parseInt($('resolution').value);
+    const g = sampleGridAdvanced(src, cols, parseFloat($('contrast').value), 
+      parseInt($('brightness').value), parseFloat($('gamma').value), useEdgeDetection, isLive);
+    if (!g) throw new Error('Failed to sample grid');
+    const text = asciiFromGrid(g, null, $('char-set').value);
+    const lines = text.split('\n');
 
-  const meas = document.createElement('canvas').getContext('2d');
-  const baseFont = 10;
-  meas.font = `${baseFont}px ${MONO_FONT}`;
-  const baseW = meas.measureText(lines[0]).width || 1;
-  const fontSize = Math.max(8, Math.floor(baseFont * (TARGET_WIDTH - pad * 2) / baseW));
+    const meas = document.createElement('canvas').getContext('2d');
+    const baseFont = 10;
+    meas.font = `${baseFont}px ${MONO_FONT}`;
+    const baseW = meas.measureText(lines[0]).width || 1;
+    const fontSize = Math.max(8, Math.floor(baseFont * (TARGET_WIDTH - pad * 2) / baseW));
 
-  meas.font = `${fontSize}px ${MONO_FONT}`;
-  const W = Math.ceil(meas.measureText(lines[0]).width) + pad * 2;
-  const H = Math.ceil(lines.length * fontSize) + pad * 2 + 80;
+    meas.font = `${fontSize}px ${MONO_FONT}`;
+    const W = Math.ceil(meas.measureText(lines[0]).width) + pad * 2;
+    const H = Math.ceil(lines.length * fontSize) + pad * 2 + 80;
 
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  
-  // Use full color mode if enabled and RGB data available
-  paintAscii(c.getContext('2d'), W, H, text,
-    $('text-color').value, $('bg-color').value, fontSize, pad, true, 
-    useFullColor ? g : null, useFullColor);
+    const c = document.createElement('canvas');
+    // Fallback to lower resolution if 4K fails
+    try {
+      c.width = W; c.height = H;
+    } catch (e) {
+      console.warn('Canvas too large, falling back to 2K', e);
+      const scale = 0.5;
+      c.width = Math.floor(W * scale); c.height = Math.floor(H * scale);
+    }
+    
+    // Use full color mode if enabled and RGB data available
+    paintAscii(c.getContext('2d'), c.width, c.height, text,
+      $('text-color').value, $('bg-color').value, fontSize, pad, true, 
+      useFullColor ? g : null, useFullColor);
 
-  if (format === 'pdf') {
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: W > H ? 'l' : 'p', unit: 'px', format: [W, H], compress: true });
-    pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, W, H);
-    pdf.save('FX-PRODUCTION-ASCII.pdf');
-    return;
+    if (format === 'pdf') {
+      if (typeof window.jspdf === 'undefined') {
+        throw new Error('مكتبة PDF غير محملة. يرجى التحقق من الاتصال بالإنترنت.');
+      }
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: c.width > c.height ? 'l' : 'p', unit: 'px', format: [c.width, c.height], compress: true });
+      pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, c.width, c.height);
+      pdf.save('FX-PRODUCTION-ASCII.pdf');
+      return;
+    }
+
+    c.toBlob(blob => {
+      if (!blob) throw new Error('فشل إنشاء الصورة');
+      saveBlob(blob, `FX-PRODUCTION-4K.${format}`);
+    }, format === 'jpg' ? 'image/jpeg' : 'image/png', 0.95);
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
   }
-
-  c.toBlob(blob => {
-    if (!blob) { alert('فشل التصدير'); return; }
-    saveBlob(blob, `FX-PRODUCTION-4K.${format}`);
-  }, format === 'jpg' ? 'image/jpeg' : 'image/png', 0.95);
 }
 
 /* ---------- Main Download Handler ---------- */
@@ -702,7 +738,7 @@ $('btn-download').addEventListener('click', async () => {
   try {
     if (format === 'video') {
       if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) {
-        alert('المتصفح لا يدعم تسجيل الفيديو');
+        throw new Error('المتصفح لا يدعم تسجيل الفيديو');
       } else if (isLive) {
         await exportLiveVideo();
       } else if (currentVideo) {
@@ -713,7 +749,10 @@ $('btn-download').addEventListener('click', async () => {
     } else {
       exportStatic(format);
     }
-  } catch (err) { console.error(err); alert('حدث خطأ أثناء التصدير'); }
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`حدث خطأ أثناء التصدير: ${err.message || err}`);
+  }
 
   btn.disabled = false;
   setTimeout(hideProgress, 800);
