@@ -62,7 +62,7 @@
   
   .tool-label{font-size:11px;color:var(--text-muted);font-weight:500;white-space:nowrap}
   
-  #video-preview{position:absolute;top:20px;right:20px;width:240px;border-radius:0;border:1px solid var(--border);display:none;z-index:5}
+  #video-preview{position:absolute;top:20px;right:20px;width:240px;border-radius:0;border:1px solid var(--border);display:none!important;z-index:5}
   
   .mode-indicator{position:absolute;top:20px;inset-inline-end:24px;display:none;align-items:center;gap:6px;color:var(--accent);font-size:11px;font-weight:700;z-index:15}
   .mode-indicator svg{width:14px;height:14px;stroke:var(--accent);stroke-width:2;fill:none}
@@ -70,12 +70,18 @@
   /* Fullscreen Button */
   #btn-fullscreen{position:absolute;top:20px;left:20px;z-index:15}
   
+  /* Exit Fullscreen Floating Button */
+  #btn-exit-fullscreen{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);color:var(--text);width:48px;height:48px;border-radius:0;display:none;align-items:center;justify-content:center;cursor:pointer;z-index:100;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+  #btn-exit-fullscreen svg{width:20px;height:20px;stroke:var(--text);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  #btn-exit-fullscreen:hover{background:var(--border)}
+  
   /* Fullscreen Mode Styles */
   body.fullscreen-mode .toolbar,
   body.fullscreen-mode #live-badge,
   body.fullscreen-mode #mode-indicator,
   body.fullscreen-mode #btn-fullscreen,
   body.fullscreen-mode #progress-container{display:none!important}
+  body.fullscreen-mode #btn-exit-fullscreen{display:flex!important}
   body.fullscreen-mode .workspace{padding:0}
   body.fullscreen-mode #output{font-size:12px}
 </style>
@@ -86,6 +92,9 @@
     <button id="btn-fullscreen" title="ملء الشاشة — Full Screen">
       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/><polyline points="9 9 3 3 9 3"/><polyline points="15 15 21 21 15 21"/><polyline points="15 9 21 3 15 3"/><polyline points="9 15 3 21 9 21"/></svg>
     </button>
+    <button id="btn-exit-fullscreen" title="خروج من ملء الشاشة — Exit Fullscreen">
+      <svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
     <div class="placeholder" id="placeholder-text">
       <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
     </div>
@@ -95,7 +104,7 @@
       <span id="mode-text">FULL COLOR</span>
     </div>
     <div id="output"></div>
-    <video id="video-preview" muted playsinline></video>
+    <video id="video-preview" playsinline></video>
   </div>
 
   <div id="progress-container"><div id="progress-bar"></div></div>
@@ -158,6 +167,11 @@
         <option value="blocks">T4</option>
         <option value="math">T5</option>
       </select>
+    </div>
+
+    <div class="tool-item" title="مستوى الصوت">
+      <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      <input type="range" id="volume" min="0" max="100" step="1" value="100">
     </div>
 
     <div class="tool-item" title="صيغة التصدير">
@@ -444,16 +458,30 @@ const loadVideo = f => {
   stopVideoPlayback();
   const video = $('video-preview');
   video.src = URL.createObjectURL(f);
+  video.muted = false; // Enable audio
   video.style.display = 'block';
   video.onloadeddata = () => {
     currentVideo = video;
     currentImg = null;
     video.play();
+    // Set initial volume
+    video.volume = parseInt($('volume').value) / 100;
     startVideoPlayback();
     $('placeholder-text').style.display = 'none';
   };
 };
 $('video-input').addEventListener('change', e => loadVideo(e.target.files[0]));
+
+// Volume control for video
+$('volume').addEventListener('input', function() {
+  const vol = parseInt(this.value) / 100;
+  if (currentVideo) {
+    currentVideo.volume = vol;
+  }
+  if (liveVideo) {
+    liveVideo.volume = vol;
+  }
+});
 
 function startVideoPlayback() {
   if (videoPlaybackInterval) clearInterval(videoPlaybackInterval);
@@ -702,6 +730,21 @@ $('btn-fullscreen').addEventListener('click', function() {
     ? '<svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>'
     : '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/><polyline points="9 9 3 3 9 3"/><polyline points="15 15 21 21 15 21"/><polyline points="15 9 21 3 15 3"/><polyline points="9 15 3 21 9 21"/></svg>';
   this.title = isFullscreen ? 'خروج من ملء الشاشة — Exit Fullscreen' : 'ملء الشاشة — Full Screen';
+});
+
+// Exit fullscreen button handler
+$('btn-exit-fullscreen').addEventListener('click', function() {
+  if (isFullscreen) {
+    $('btn-fullscreen').click();
+  }
+});
+
+// Keyboard support for Exit Fullscreen (Escape or F11)
+document.addEventListener('keydown', function(e) {
+  if (isFullscreen && (e.key === 'Escape' || e.key === 'F11')) {
+    e.preventDefault();
+    $('btn-exit-fullscreen').click();
+  }
 });
 
 // Hide video preview completely - only show ASCII art
