@@ -292,17 +292,18 @@ function asciiFromGrid(g, density, setKey) {
 }
 
 /* ---------- Paint ASCII on Canvas (with optional full color) ---------- */
-function paintAscii(ctx, W, H, text, textColor, bgColor, fontSize, pad, copyright, g = null, colorMode = false) {
+function paintAscii(ctx, W, H, text, textColor, bgColor, fontSize, pad, copyright, rgbGrid = null, gridH = 0, gridW = 0, colorMode = false) {
   const lines = text.split('\n');
   ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
-  ctx.font = `${fontSize}px ${MONO_FONT}`;
-  ctx.textBaseline = 'top'; ctx.textAlign = 'left';
   
-  if (colorMode && g && g.rgbGrid) {
+  if (colorMode && rgbGrid && gridH > 0 && gridW > 0) {
     // Full color mode: draw each character with its RGB color
-    for (let y = 0; y < g.h; y++) {
-      for (let x = 0; x < g.w; x++) {
-        const rgb = g.rgbGrid[y * g.w + x];
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.font = `${fontSize}px ${MONO_FONT}`;
+    for (let y = 0; y < Math.min(gridH, lines.length); y++) {
+      for (let x = 0; x < gridW; x++) {
+        if (x >= lines[y].length) continue;
+        const rgb = rgbGrid[y * gridW + x];
         const r = (rgb >> 16) & 0xFF;
         const gVal = (rgb >> 8) & 0xFF;
         const b = rgb & 0xFF;
@@ -314,6 +315,8 @@ function paintAscii(ctx, W, H, text, textColor, bgColor, fontSize, pad, copyrigh
   } else {
     // Monochrome mode
     ctx.fillStyle = textColor;
+    ctx.font = `${fontSize}px ${MONO_FONT}`;
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
     for (let i = 0; i < lines.length; i++) {
       ctx.fillText(lines[i], pad, pad + i * fontSize);
     }
@@ -561,13 +564,13 @@ async function exportSweepVideo() {
     const ctx = c.getContext('2d');
 
     const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-MOTION.${ext}`));
-    paintAscii(ctx, W, H, asciiFromGrid(g, 1, $('char-set').value), tc, bg, fontSize, pad, true, null, false);
+    paintAscii(ctx, W, H, asciiFromGrid(g, 1, $('char-set').value), tc, bg, fontSize, pad, true, null, 0, 0, false);
     rec.start();
 
     for (let i = 0; i < FRAMES; i++) {
       const t = i / (FRAMES - 1);
       const pp = t < .5 ? t * 2 : 2 - t * 2;
-      paintAscii(ctx, W, H, asciiFromGrid(g, 0.5 + pp * 2.5, $('char-set').value), tc, bg, fontSize, pad, true, null, false);
+      paintAscii(ctx, W, H, asciiFromGrid(g, 0.5 + pp * 2.5, $('char-set').value), tc, bg, fontSize, pad, true, null, 0, 0, false);
       showProgress(Math.round(((i + 1) / FRAMES) * 100));
       await sleep(1000 / FPS);
     }
@@ -601,7 +604,7 @@ async function exportLiveVideo() {
 
     for (let i = 0; i < total; i++) {
       const g = sampleGridAdvanced(liveVideo, cols, con, br, gm, useEdgeDetection, true);
-      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, false);
+      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, 0, 0, false);
       showProgress(Math.round(((i + 1) / total) * 100));
       await sleep(1000 / FPS);
     }
@@ -654,7 +657,7 @@ async function exportVideoFile() {
       });
       
       const g = sampleGridAdvanced(video, cols, con, br, gm, useEdgeDetection);
-      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, false);
+      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, 0, 0, false);
       showProgress(Math.round(((i + 1) / totalFrames) * 100));
       await sleep(1000 / FPS);
     }
@@ -706,7 +709,7 @@ function exportStatic(format) {
     // Use full color mode if enabled and RGB data available
     paintAscii(c.getContext('2d'), c.width, c.height, text,
       $('text-color').value, $('bg-color').value, fontSize, pad, true, 
-      isFullColorActive ? g : null, isFullColorActive);
+      isFullColorActive && g ? g.rgbGrid : null, isFullColorActive && g ? g.h : 0, isFullColorActive && g ? g.w : 0, isFullColorActive);
 
     if (format === 'pdf') {
       if (typeof window.jspdf === 'undefined') {
