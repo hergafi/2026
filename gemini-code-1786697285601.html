@@ -80,17 +80,34 @@
   body.fullscreen-mode #btn-exit-fullscreen{display:flex!important}
   body.fullscreen-mode .workspace{padding:0}
   body.fullscreen-mode #output{font-size:12px}
+  
+  #fps-counter{position:absolute;top:20px;right:50%;transform:translateX(50%);background:var(--surface);border:1px solid var(--border);padding:6px 12px;border-radius:0;font-size:11px;font-weight:700;color:var(--accent);z-index:15;display:none}
+  
+  #progress-text{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;color:var(--text);z-index:20;display:none}
+  
+  .tooltip{position:relative}
+  .tooltip::after{content:attr(title);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:4px 8px;border-radius:0;font-size:10px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s;z-index:100}
+  .tooltip:hover::after{opacity:1}
+  
+  #video-toggle-btn{position:absolute;top:20px;right:70px;display:none;background:var(--surface);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:0;align-items:center;justify-content:center;cursor:pointer;z-index:15}
+  #video-toggle-btn svg{width:18px;height:18px;stroke:var(--text);stroke-width:2;fill:none}
+  
+  .lang-switch{position:absolute;top:20px;left:70px;background:var(--surface);border:1px solid var(--border);padding:4px 8px;border-radius:0;font-size:11px;font-weight:700;color:var(--text);cursor:pointer;z-index:15}
 </style>
 </head>
 <body>
 
   <div class="workspace" id="drop-zone">
-    <button id="btn-fullscreen" title="ملء الشاشة — Full Screen">
+    <button id="btn-fullscreen" class="tooltip" title="ملء الشاشة — Full Screen">
       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/><polyline points="9 9 3 3 9 3"/><polyline points="15 15 21 21 15 21"/><polyline points="15 9 21 3 15 3"/><polyline points="9 15 3 21 9 21"/></svg>
     </button>
     <button id="btn-exit-fullscreen" title="خروج من ملء الشاشة — Exit Fullscreen">
       <svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
     </button>
+    <button id="video-toggle-btn" class="tooltip" title="إظهار الفيديو — Show Video">
+      <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    </button>
+    <button id="lang-btn" class="lang-switch tooltip" title="English/العربية">AR</button>
     <div class="placeholder" id="placeholder-text">
       <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
     </div>
@@ -100,10 +117,12 @@
       <span id="mode-text">FULL COLOR</span>
     </div>
     <div id="output"></div>
+    <div id="fps-counter">FPS: 0</div>
     <video id="video-preview" playsinline></video>
   </div>
 
   <div id="progress-container"><div id="progress-bar"></div></div>
+  <div id="progress-text">0%</div>
 
   <div class="toolbar">
     <label class="icon-btn" title="رفع صورة">
@@ -215,9 +234,67 @@ let isLive = false, liveStream = null, liveVideo = null, liveRAF = null, lastLiv
 let videoPlaybackInterval = null;
 let isFullColorActive = false;
 let useEdgeDetection = false;
+let isFullscreen = false;
+let showVideoPreview = false;
+let currentLang = 'ar';
+let fpsCounter = 0;
+let lastFpsUpdate = 0;
+let frameCount = 0;
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Translations
+const TRANSLATIONS = {
+  ar: {
+    uploadImage: 'رفع صورة',
+    uploadVideo: 'رفع فيديو',
+    liveCamera: 'كاميرا مباشرة — Live Motion',
+    theme: 'تغيير المظهر',
+    resolution: 'الدقة (Scale)',
+    contrast: 'التباين',
+    brightness: 'السطوع',
+    gamma: 'Gamma',
+    edgeDetect: 'كشف الحواف',
+    fullColor: 'تلوين كامل — Full Color Mode',
+    charSet: 'نمط الرموز',
+    volume: 'مستوى الصوت',
+    exportRes: 'دقة التصدير',
+    exportFormat: 'صيغة التصدير',
+    download: 'تحميل',
+    fullscreen: 'ملء الشاشة — Full Screen',
+    exitFullscreen: 'خروج من ملء الشاشة — Exit Fullscreen',
+    showVideo: 'إظهار الفيديو — Show Video',
+    hideVideo: 'إخفاء الفيديو — Hide Video',
+    placeholder: 'اسحب وأفلت صورة أو فيديو هنا',
+    modeText: 'FULL COLOR',
+    liveBadge: 'LIVE'
+  },
+  en: {
+    uploadImage: 'Upload Image',
+    uploadVideo: 'Upload Video',
+    liveCamera: 'Live Camera — Live Motion',
+    theme: 'Toggle Theme',
+    resolution: 'Resolution (Scale)',
+    contrast: 'Contrast',
+    brightness: 'Brightness',
+    gamma: 'Gamma',
+    edgeDetect: 'Edge Detection',
+    fullColor: 'Full Color Mode',
+    charSet: 'Character Set',
+    volume: 'Volume Level',
+    exportRes: 'Export Resolution',
+    exportFormat: 'Export Format',
+    download: 'Download',
+    fullscreen: 'Full Screen',
+    exitFullscreen: 'Exit Full Screen',
+    showVideo: 'Show Video',
+    hideVideo: 'Hide Video',
+    placeholder: 'Drag & Drop Image or Video Here',
+    modeText: 'FULL COLOR',
+    liveBadge: 'LIVE'
+  }
+};
 
 // Helper function to safely get dynamic dark/light colors
 function getThemeColors() {
@@ -225,6 +302,56 @@ function getThemeColors() {
   const tc = $('text-color')?.value || (isDark ? '#f5f5f7' : '#1d1d1f');
   const bg = $('bg-color')?.value || (isDark ? '#000000' : '#ffffff');
   return { tc, bg };
+}
+
+// Save/Load settings
+function saveSettings() {
+  const settings = {
+    resolution: $('resolution')?.value,
+    contrast: $('contrast')?.value,
+    brightness: $('brightness')?.value,
+    gamma: $('gamma')?.value,
+    charSet: $('char-set')?.value,
+    volume: $('volume')?.value,
+    exportResolution: $('export-resolution')?.value,
+    exportFormat: $('export-format')?.value,
+    isFullColorActive,
+    useEdgeDetection,
+    currentLang,
+    theme: document.documentElement.getAttribute('data-theme')
+  };
+  localStorage.setItem('asciiStudioSettings', JSON.stringify(settings));
+}
+
+function loadSettings() {
+  const saved = localStorage.getItem('asciiStudioSettings');
+  if (!saved) return;
+  try {
+    const settings = JSON.parse(saved);
+    if (settings.resolution) $('resolution')!.value = settings.resolution;
+    if (settings.contrast) $('contrast')!.value = settings.contrast;
+    if (settings.brightness) $('brightness')!.value = settings.brightness;
+    if (settings.gamma) $('gamma')!.value = settings.gamma;
+    if (settings.charSet) $('char-set')!.value = settings.charSet;
+    if (settings.volume) $('volume')!.value = settings.volume;
+    if (settings.exportResolution) $('export-resolution')!.value = settings.exportResolution;
+    if (settings.exportFormat) $('export-format')!.value = settings.exportFormat;
+    if (settings.isFullColorActive !== undefined) {
+      isFullColorActive = settings.isFullColorActive;
+      $('btn-fullcolor')?.classList.toggle('active', isFullColorActive);
+    }
+    if (settings.useEdgeDetection !== undefined) {
+      useEdgeDetection = settings.useEdgeDetection;
+      $('edge-toggle')?.classList.toggle('active', useEdgeDetection);
+    }
+    if (settings.currentLang) {
+      currentLang = settings.currentLang;
+      $('lang-btn')!.textContent = currentLang.toUpperCase();
+    }
+    if (settings.theme) document.documentElement.setAttribute('data-theme', settings.theme);
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+  }
 }
 
 /* ---------- Advanced Grid Sampling ---------- */
@@ -367,6 +494,12 @@ $('contrast')?.addEventListener('input', schedule);
 $('brightness')?.addEventListener('input', schedule);
 $('gamma')?.addEventListener('input', schedule);
 $('char-set')?.addEventListener('change', processSource);
+
+// Save settings on change
+['resolution', 'contrast', 'brightness', 'gamma', 'char-set', 'volume', 'export-resolution', 'export-format'].forEach(id => {
+  $(id)?.addEventListener('change', saveSettings);
+  $(id)?.addEventListener('input', () => { if ($(id)?.tagName === 'INPUT') saveSettings(); });
+});
 
 $('btn-fullcolor').addEventListener('click', function() {
   isFullColorActive = !isFullColorActive;
@@ -783,14 +916,106 @@ $('btn-exit-fullscreen').addEventListener('click', function() {
   }
 });
 
+// Video toggle button
+$('video-toggle-btn')?.addEventListener('click', function() {
+  showVideoPreview = !showVideoPreview;
+  $('video-preview')!.style.display = showVideoPreview ? 'block' : 'none';
+  this.title = showVideoPreview ? TRANSLATIONS[currentLang].hideVideo : TRANSLATIONS[currentLang].showVideo;
+});
+
+// Language switcher
+$('lang-btn')?.addEventListener('click', function() {
+  currentLang = currentLang === 'ar' ? 'en' : 'ar';
+  this.textContent = currentLang.toUpperCase();
+  applyLanguage(currentLang);
+  saveSettings();
+});
+
+function applyLanguage(lang) {
+  const t = TRANSLATIONS[lang];
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  document.documentElement.lang = lang;
+  
+  // Update tooltips
+  $('file-input')?.parentElement.setAttribute('title', t.uploadImage);
+  $('video-input')?.parentElement.setAttribute('title', t.uploadVideo);
+  $('btn-live')?.setAttribute('title', t.liveCamera);
+  $('btn-theme')?.setAttribute('title', t.theme);
+  $('btn-download')?.setAttribute('title', t.download);
+  $('btn-fullscreen')?.setAttribute('title', isFullscreen ? t.exitFullscreen : t.fullscreen);
+  $('video-toggle-btn')?.setAttribute('title', showVideoPreview ? t.hideVideo : t.showVideo);
+  
+  // Update placeholder text
+  const placeholderSvg = $('placeholder-text')?.querySelector('svg');
+  if ($('placeholder-text')) {
+    $('placeholder-text').innerHTML = `<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
+  }
+}
+
+// Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
-  if (isFullscreen && (e.key === 'Escape' || e.key === 'F11')) {
-    e.preventDefault();
-    $('btn-exit-fullscreen').click();
+  // Don't trigger shortcuts when typing in inputs
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  
+  switch(e.key.toLowerCase()) {
+    case 'f':
+      e.preventDefault();
+      $('btn-fullscreen')?.click();
+      break;
+    case 'c':
+      e.preventDefault();
+      $('btn-fullcolor')?.click();
+      break;
+    case 'e':
+      e.preventDefault();
+      $('edge-toggle')?.click();
+      break;
+    case 't':
+      e.preventDefault();
+      $('btn-theme')?.click();
+      break;
+    case 'l':
+      e.preventDefault();
+      $('btn-live')?.click();
+      break;
+    case 'd':
+      e.preventDefault();
+      $('btn-download')?.click();
+      break;
+    case '+':
+    case '=':
+      e.preventDefault();
+      const resUp = $('resolution');
+      if (resUp && parseInt(resUp.value) < 250) {
+        resUp.value = parseInt(resUp.value) + 10;
+        resUp.dispatchEvent(new Event('input'));
+      }
+      break;
+    case '-':
+    case '_':
+      e.preventDefault();
+      const resDown = $('resolution');
+      if (resDown && parseInt(resDown.value) > 50) {
+        resDown.value = parseInt(resDown.value) - 10;
+        resDown.dispatchEvent(new Event('input'));
+      }
+      break;
+    case 'escape':
+    case 'f11':
+      if (isFullscreen) {
+        e.preventDefault();
+        $('btn-exit-fullscreen')?.click();
+      }
+      break;
   }
 });
 
-$('video-preview').style.display = 'none';
+// Initialize on load
+window.addEventListener('load', () => {
+  loadSettings();
+  applyLanguage(currentLang);
+  $('video-preview')!.style.display = 'none';
+});
 </script>
 </body>
 </html>
