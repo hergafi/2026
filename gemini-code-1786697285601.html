@@ -61,7 +61,7 @@
   
   .tool-label{font-size:11px;color:var(--text-muted);font-weight:500;white-space:nowrap}
   
-  #video-preview{position:absolute;top:20px;right:20px;width:240px;border-radius:0;border:1px solid var(--border);display:none!important;visibility:hidden;opacity:0;z-index:5}
+  #video-preview{position:absolute;top:20px;right:20px;width:240px;border-radius:0;border:1px solid var(--border);display:none;z-index:5}
   
   .mode-indicator{position:absolute;top:20px;inset-inline-end:24px;display:none;align-items:center;gap:6px;color:var(--accent);font-size:11px;font-weight:700;z-index:15}
   .mode-indicator svg{width:14px;height:14px;stroke:var(--accent);stroke-width:2;fill:none}
@@ -81,7 +81,7 @@
   body.fullscreen-mode .workspace{padding:0}
   body.fullscreen-mode #output{font-size:12px}
   
-  #fps-counter{position:absolute;top:20px;right:50%;transform:translateX(50%);background:var(--surface);border:1px solid var(--border);padding:6px 12px;border-radius:0;font-size:11px;font-weight:700;color:var(--accent);z-index:15;display:none}
+  #fps-counter{position:absolute;top:20px;right:50%;transform:translateX(50%);background:var(--surface);border:1px solid var(--border);padding:6px 12px;border-radius:0;font-size:11px;font-weight:700;color:var(--accent);z-index:15}
   
   #progress-text{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;color:var(--text);z-index:20;display:none}
   
@@ -89,7 +89,7 @@
   .tooltip::after{content:attr(title);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:4px 8px;border-radius:0;font-size:10px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s;z-index:100}
   .tooltip:hover::after{opacity:1}
   
-  #video-toggle-btn{position:absolute;top:20px;right:70px;display:none;background:var(--surface);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:0;align-items:center;justify-content:center;cursor:pointer;z-index:15}
+  #video-toggle-btn{position:absolute;top:20px;right:70px;background:var(--surface);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:0;align-items:center;justify-content:center;cursor:pointer;z-index:15}
   #video-toggle-btn svg{width:18px;height:18px;stroke:var(--text);stroke-width:2;fill:none}
   
   .lang-switch{position:absolute;top:20px;left:70px;background:var(--surface);border:1px solid var(--border);padding:4px 8px;border-radius:0;font-size:11px;font-weight:700;color:var(--text);cursor:pointer;z-index:15}
@@ -318,7 +318,8 @@ function saveSettings() {
     isFullColorActive,
     useEdgeDetection,
     currentLang,
-    theme: document.documentElement.getAttribute('data-theme')
+    theme: document.documentElement.getAttribute('data-theme'),
+    showVideoPreview
   };
   localStorage.setItem('asciiStudioSettings', JSON.stringify(settings));
 }
@@ -349,6 +350,9 @@ function loadSettings() {
       $('lang-btn')!.textContent = currentLang.toUpperCase();
     }
     if (settings.theme) document.documentElement.setAttribute('data-theme', settings.theme);
+    if (settings.showVideoPreview !== undefined) {
+      showVideoPreview = settings.showVideoPreview;
+    }
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -506,12 +510,14 @@ $('btn-fullcolor').addEventListener('click', function() {
   this.classList.toggle('active', isFullColorActive);
   this.title = isFullColorActive ? 'تعطيل التلوين — Disable Color' : 'تلوين كامل — Full Color Mode';
   schedule();
+  saveSettings();
 });
 
 $('edge-toggle').addEventListener('click', function() {
   this.classList.toggle('active');
   useEdgeDetection = this.classList.contains('active');
   schedule();
+  saveSettings();
 });
 
 /* ---------- LIVE MOTION ---------- */
@@ -554,6 +560,17 @@ function stopLive() {
 function liveLoop(ts) {
   if (!isLive) return;
   liveRAF = requestAnimationFrame(liveLoop);
+  
+  // FPS counter update
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsUpdate >= 1000) {
+    fpsCounter = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+    $('fps-counter')!.textContent = `FPS: ${fpsCounter}`;
+    frameCount = 0;
+    lastFpsUpdate = now;
+  }
+  
   if (ts - lastLive < 33) return;
   lastLive = ts;
   if (liveVideo.readyState >= 2) {
@@ -582,6 +599,7 @@ $('btn-theme').addEventListener('click', () => {
     const { tc } = getThemeColors();
     if (isLive) $('output').style.color = tc; else processSource();
   }
+  saveSettings();
 });
 
 /* ---------- Image Upload ---------- */
@@ -603,7 +621,7 @@ const loadVideo = f => {
   const video = $('video-preview');
   video.src = URL.createObjectURL(f);
   video.muted = false;
-  video.style.display = 'none';
+  video.style.display = showVideoPreview ? 'block' : 'none';
   video.onloadeddata = () => {
     currentVideo = video;
     currentImg = null;
@@ -640,6 +658,7 @@ function stopVideoPlayback() {
     video.src = '';
   }
   currentVideo = null;
+  showVideoPreview = false;
 }
 
 /* ---------- Drag & Drop ---------- */
@@ -907,7 +926,8 @@ $('btn-fullscreen').addEventListener('click', function() {
   this.innerHTML = isFullscreen 
     ? '<svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>'
     : '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/><polyline points="9 9 3 3 9 3"/><polyline points="15 15 21 21 15 21"/><polyline points="9 15 3 21 9 21"/></svg>';
-  this.title = isFullscreen ? 'خروج من ملء الشاشة — Exit Fullscreen' : 'ملء الشاشة — Full Screen';
+  this.title = isFullscreen ? TRANSLATIONS[currentLang].exitFullscreen : TRANSLATIONS[currentLang].fullscreen;
+  saveSettings();
 });
 
 $('btn-exit-fullscreen').addEventListener('click', function() {
@@ -921,6 +941,7 @@ $('video-toggle-btn')?.addEventListener('click', function() {
   showVideoPreview = !showVideoPreview;
   $('video-preview')!.style.display = showVideoPreview ? 'block' : 'none';
   this.title = showVideoPreview ? TRANSLATIONS[currentLang].hideVideo : TRANSLATIONS[currentLang].showVideo;
+  saveSettings();
 });
 
 // Language switcher
