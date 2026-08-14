@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ASCII Motion Studio | FX Production 2026</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg:#ffffff; --surface:#f5f5f7; --border:#d2d2d7;
+    --text:#1d1d1f; --text-muted:#86868b; --accent:#0071e3; --accent-hover:#0077ed;
+  }
+  [data-theme="dark"] {
+    --bg:#000000; --surface:#161617; --border:#38383a;
+    --text:#f5f5f7; --text-muted:#86868b; --accent:#0a84ff; --accent-hover:#409cff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;outline:none;transition:background-color .25s ease,color .25s ease,border-color .25s ease}
+  body{background-color:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+
+  .workspace{flex:1;display:flex;align-items:center;justify-content:center;padding:32px;position:relative;overflow:auto}
+  .placeholder{position:absolute;display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--text-muted);font-size:14px;font-weight:500;pointer-events:none}
+  .placeholder svg{width:48px;height:48px;stroke:var(--text-muted);stroke-width:1.5;fill:none}
+
+  #output{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre;line-height:1;font-size:10px;display:none;direction:ltr;text-align:left;user-select:all}
+
+  #live-badge{position:absolute;top:20px;inset-inline-start:24px;display:none;align-items:center;gap:6px;color:#ff3b30;font-size:11px;font-weight:700;letter-spacing:2px;z-index:15}
+  #live-badge .dot{width:8px;height:8px;border-radius:0;background:#ff3b30;animation:blink 1s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+  .toolbar{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:8px;border-radius:0;box-shadow:0 10px 30px rgba(0,0,0,.2);z-index:10;max-width:calc(100% - 32px);overflow-x:auto;scrollbar-width:none}
+  .toolbar::-webkit-scrollbar{display:none}
+
+  .tool-item{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);padding:6px 10px;border-radius:0;flex-shrink:0}
+  .tool-item svg{width:16px;height:16px;stroke:var(--text-muted);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+  button,label.icon-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+  button svg,label.icon-btn svg{width:18px;height:18px;stroke:var(--text);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  button:hover,label.icon-btn:hover{background:var(--border)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary svg{stroke:#fff}
+  button.primary:hover{background:var(--accent-hover)}
+
+  button.live-active{background:#ff3b30;border-color:#ff3b30;color:#fff;animation:pulse 1.6s infinite}
+  button.live-active svg{stroke:#fff}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,48,.5)}70%{box-shadow:0 0 0 10px rgba(255,59,48,0)}100%{box-shadow:0 0 0 0 rgba(255,59,48,0)}}
+
+  input[type="file"]{display:none}
+  input[type="color"]{border:none;width:22px;height:22px;border-radius:0;cursor:pointer;background:transparent}
+  input[type="range"]{accent-color:var(--accent);width:60px;height:4px}
+  select{background:transparent;color:var(--text);border:none;outline:none;font-size:13px;font-weight:500;cursor:pointer}
+  select option{background:var(--surface);color:var(--text)}
+
+  #progress-container{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);width:220px;height:4px;background:var(--border);border-radius:0;display:none;overflow:hidden;z-index:20}
+  #progress-bar{height:100%;width:0%;background:var(--accent);transition:width .15s}
+
+  .toggle-switch{position:relative;width:44px;height:24px;background:var(--border);border-radius:0;cursor:pointer;transition:background .25s}
+  .toggle-switch.active{background:var(--accent)}
+  .toggle-switch::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:0;transition:transform .25s}
+  .toggle-switch.active::after{transform:translateX(20px)}
+  
+  .tool-label{font-size:11px;color:var(--text-muted);font-weight:500;white-space:nowrap}
+  
+  #video-preview{position:absolute;top:20px;right:20px;width:240px;border-radius:0;border:1px solid var(--border);display:none!important;visibility:hidden;opacity:0;z-index:5}
+  
+  .mode-indicator{position:absolute;top:20px;inset-inline-end:24px;display:none;align-items:center;gap:6px;color:var(--accent);font-size:11px;font-weight:700;z-index:15}
+  .mode-indicator svg{width:14px;height:14px;stroke:var(--accent);stroke-width:2;fill:none}
+  
+  #btn-fullscreen{position:absolute;top:20px;left:20px;z-index:15}
+  
+  #btn-exit-fullscreen{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);color:var(--text);width:48px;height:48px;border-radius:0;display:none;align-items:center;justify-content:center;cursor:pointer;z-index:100;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+  #btn-exit-fullscreen svg{width:20px;height:20px;stroke:var(--text);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  #btn-exit-fullscreen:hover{background:var(--border)}
+  
+  body.fullscreen-mode .toolbar,
+  body.fullscreen-mode #live-badge,
+  body.fullscreen-mode #mode-indicator,
+  body.fullscreen-mode #btn-fullscreen,
+  body.fullscreen-mode #progress-container{display:none!important}
+  body.fullscreen-mode #btn-exit-fullscreen{display:flex!important}
+  body.fullscreen-mode .workspace{padding:0}
+  body.fullscreen-mode #output{font-size:12px}
+</style>
+</head>
+<body>
+
+  <div class="workspace" id="drop-zone">
+    <button id="btn-fullscreen" title="ملء الشاشة — Full Screen">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/><polyline points="9 9 3 3 9 3"/><polyline points="15 15 21 21 15 21"/><polyline points="15 9 21 3 15 3"/><polyline points="9 15 3 21 9 21"/></svg>
+    </button>
+    <button id="btn-exit-fullscreen" title="خروج من ملء الشاشة — Exit Fullscreen">
+      <svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    <div class="placeholder" id="placeholder-text">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <div id="live-badge"><span class="dot"></span>LIVE</div>
+    <div id="mode-indicator" class="mode-indicator">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
+      <span id="mode-text">FULL COLOR</span>
+    </div>
+    <div id="output"></div>
+    <video id="video-preview" playsinline></video>
+  </div>
+
+  <div id="progress-container"><div id="progress-bar"></div></div>
+
+  <div class="toolbar">
+    <label class="icon-btn" title="رفع صورة">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <input type="file" id="file-input" accept="image/*">
+    </label>
+
+    <label class="icon-btn" title="رفع فيديو">
+      <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="8" y2="17"/><line x1="8" y1="7" x2="8" y2="3"/><line x1="12" y1="21" x2="12" y2="17"/><line x1="12" y1="7" x2="12" y2="3"/></svg>
+      <input type="file" id="video-input" accept="video/mp4,video/webm">
+    </label>
+
+    <button id="btn-live" title="كاميرا مباشرة — Live Motion">
+      <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+    </button>
+
+    <button id="btn-theme" title="تغيير المظهر">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+
+    <div class="tool-item" title="الدقة (Scale)">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      <input type="range" id="resolution" min="50" max="250" value="130">
+    </div>
+
+    <div class="tool-item" title="التباين">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2v20"/><path d="M12 2a10 10 0 0 1 0 20" fill="currentColor" opacity="0.3"/></svg>
+      <input type="range" id="contrast" min="0.1" max="5.0" step="0.1" value="1.5">
+    </div>
+
+    <div class="tool-item" title="السطوع">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <input type="range" id="brightness" min="-100" max="100" step="1" value="0">
+    </div>
+
+    <div class="tool-item" title="Gamma">
+      <svg viewBox="0 0 24 24"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><line x1="3" y1="15" x2="9" y2="15"/><line x1="6" y1="12" x2="6" y2="18"/></svg>
+      <input type="range" id="gamma" min="0.3" max="3.0" step="0.1" value="1.0">
+    </div>
+
+    <div class="tool-item" title="كشف الحواف">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/></svg>
+      <div class="toggle-switch" id="edge-toggle"></div>
+    </div>
+
+    <button id="btn-fullcolor" title="تلوين كامل — Full Color Mode">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z"/><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2v4m0 12v4m10-10h-4M2 12H6m13.657-7.657l-2.829 2.829M7.172 16.828l-2.829 2.829m14.314 0l-2.829-2.829M7.172 7.172L4.343 4.343"/></svg>
+    </button>
+
+    <div class="tool-item" title="نمط الرموز">
+      <svg viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+      <select id="char-set">
+        <option value="detailed">T1</option>
+        <option value="classic">T2</option>
+        <option value="minimal">T3</option>
+        <option value="blocks">T4</option>
+        <option value="math">T5</option>
+      </select>
+    </div>
+
+    <div class="tool-item" title="مستوى الصوت">
+      <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      <input type="range" id="volume" min="0" max="100" step="1" value="100">
+    </div>
+
+    <div class="tool-item" title="دقة التصدير">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      <select id="export-resolution">
+        <option value="1">SD (720p)</option>
+        <option value="1.5" selected>Full HD (1080p)</option>
+        <option value="2">2K (1440p)</option>
+        <option value="3">4K (2160p)</option>
+      </select>
+    </div>
+
+    <div class="tool-item" title="صيغة التصدير">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <select id="export-format">
+        <option value="png">PNG</option>
+        <option value="jpg">JPG</option>
+        <option value="pdf">PDF</option>
+        <option value="video">VIDEO ⚡</option>
+      </select>
+    </div>
+
+    <button class="primary" id="btn-download" title="تحميل">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+  </div>
+
+<script>
+const CHAR_SETS = {
+  detailed: " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+  classic:  " .:-=+*#%@$",
+  minimal:  " .:-=#@",
+  blocks:   " ░▒▓█",
+  math:     " ·÷+-×±=≠≈∞∑∏√∫§"
+};
+
+const FPS = 24;
+const ANIM_COLUMNS = 100;
+const FRAMES = 48;
+const TARGET_WIDTH = 3840;
+const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+let currentImg = null;
+let currentVideo = null;
+let isLive = false, liveStream = null, liveVideo = null, liveRAF = null, lastLive = 0;
+let videoPlaybackInterval = null;
+let isFullColorActive = false;
+let useEdgeDetection = false;
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Helper function to safely get dynamic dark/light colors
+function getThemeColors() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc = $('text-color')?.value || (isDark ? '#f5f5f7' : '#1d1d1f');
+  const bg = $('bg-color')?.value || (isDark ? '#000000' : '#ffffff');
+  return { tc, bg };
+}
+
+/* ---------- Advanced Grid Sampling ---------- */
+function sampleGridAdvanced(src, w, contrastVal, brightnessVal, gammaVal, edgeMode, mirror = false) {
+  const sw = src.videoWidth || src.naturalWidth || src.width;
+  const sh = src.videoHeight || src.naturalHeight || src.height;
+  if (!sw || !sh) return null;
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const h = Math.floor(w * (sh / sw) * 0.5);
+  c.width = w; c.height = h;
+  
+  let filterStr = `contrast(${contrastVal}) brightness(${1 + brightnessVal/100})`;
+  ctx.filter = filterStr;
+  
+  if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(src, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  
+  const grid = new Float32Array(w * h);
+  const rgbGrid = new Uint32Array(w * h);
+  
+  for (let i = 0; i < w * h; i++) {
+    const p = i * 4;
+    let r = d[p], g = d[p+1], b = d[p+2];
+    
+    r = Math.min(255, Math.pow(r / 255, 1/gammaVal) * 255);
+    g = Math.min(255, Math.pow(g / 255, 1/gammaVal) * 255);
+    b = Math.min(255, Math.pow(b / 255, 1/gammaVal) * 255);
+    
+    rgbGrid[i] = (Math.floor(r) << 16) | (Math.floor(g) << 8) | Math.floor(b);
+    
+    if (edgeMode) {
+      const x = i % w, y = Math.floor(i / w);
+      let gx = 0, gy = 0;
+      if (x > 0 && x < w-1 && y > 0 && y < h-1) {
+        const getLum = (xx, yy) => {
+          const idx = (yy * w + xx) * 4;
+          return d[idx]*0.299 + d[idx+1]*0.587 + d[idx+2]*0.114;
+        };
+        gx = -getLum(x-1,y-1) - 2*getLum(x-1,y) - getLum(x-1,y+1) 
+             + getLum(x+1,y-1) + 2*getLum(x+1,y) + getLum(x+1,y+1);
+        gy = -getLum(x-1,y-1) - 2*getLum(x,y-1) - getLum(x+1,y-1)
+             + getLum(x-1,y+1) + 2*getLum(x,y+1) + getLum(x+1,y+1);
+      }
+      const magnitude = Math.sqrt(gx*gx + gy*gy);
+      grid[i] = Math.min(255, magnitude) / 255;
+    } else {
+      grid[i] = (r*0.299 + g*0.587 + b*0.114) / 255;
+    }
+  }
+  return { grid, rgbGrid, w, h };
+}
+
+/* ---------- ASCII from Grid ---------- */
+function asciiFromGrid(g, density, setKey) {
+  const ch = CHAR_SETS[setKey] || CHAR_SETS.detailed;
+  const len = ch.length;
+  const rows = new Array(g.h);
+  for (let y = 0; y < g.h; y++) {
+    let row = '';
+    const off = y * g.w;
+    for (let x = 0; x < g.w; x++) {
+      let v = g.grid[off + x];
+      if (density !== null) v = Math.pow(v, density);
+      row += ch[Math.max(0, Math.min(len - 1, Math.floor(v * (len - 1))))];
+    }
+    rows[y] = row;
+  }
+  return rows.join('\n');
+}
+
+/* ---------- Paint ASCII on Canvas ---------- */
+function paintAscii(ctx, W, H, text, textColor, bgColor, fontSize, pad, copyright, rgbGrid = null, gridH = 0, gridW = 0, colorMode = false) {
+  const lines = text.split('\n');
+  ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H);
+  
+  if (colorMode && rgbGrid && gridH > 0 && gridW > 0) {
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.font = `${fontSize}px ${MONO_FONT}`;
+    for (let y = 0; y < Math.min(gridH, lines.length); y++) {
+      for (let x = 0; x < gridW; x++) {
+        if (x >= lines[y].length) continue;
+        const rgb = rgbGrid[y * gridW + x];
+        const r = (rgb >> 16) & 0xFF;
+        const gVal = (rgb >> 8) & 0xFF;
+        const b = rgb & 0xFF;
+        ctx.fillStyle = `rgb(${r},${gVal},${b})`;
+        const ch = lines[y][x] || ' ';
+        ctx.fillText(ch, pad + x * fontSize * 0.6, pad + y * fontSize);
+      }
+    }
+  } else {
+    ctx.fillStyle = textColor;
+    ctx.font = `${fontSize}px ${MONO_FONT}`;
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], pad, pad + i * fontSize);
+    }
+  }
+  
+  if (copyright) {
+    ctx.globalAlpha = 0.7;
+    const cFont = Math.max(14, Math.min(24, fontSize * 0.5));
+    ctx.font = `${cFont}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = textColor;
+    ctx.fillText('© FX Production 2026', W - pad + 20, H - pad / 2);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------- Preview Rendering ---------- */
+const processSource = () => {
+  const src = isLive ? liveVideo : (currentVideo || currentImg);
+  if (!src || (isLive && liveVideo.readyState < 2)) return;
+  
+  const resVal = parseInt($('resolution')?.value || '130');
+  const conVal = parseFloat($('contrast')?.value || '1.5');
+  const brVal = parseInt($('brightness')?.value || '0');
+  const gmVal = parseFloat($('gamma')?.value || '1.0');
+  const setVal = $('char-set')?.value || 'detailed';
+
+  const g = sampleGridAdvanced(src, resVal, conVal, brVal, gmVal, useEdgeDetection);
+  if (!g) return;
+  
+  const out = $('output');
+  out.textContent = asciiFromGrid(g, null, setVal);
+  out.style.display = 'block';
+  $('placeholder-text').style.display = 'none';
+  
+  $('mode-indicator').style.display = isFullColorActive ? 'flex' : 'none';
+};
+
+let rafId = null;
+const schedule = () => { if (rafId) cancelAnimationFrame(rafId); rafId = requestAnimationFrame(processSource); };
+
+$('resolution')?.addEventListener('input', schedule);
+$('contrast')?.addEventListener('input', schedule);
+$('brightness')?.addEventListener('input', schedule);
+$('gamma')?.addEventListener('input', schedule);
+$('char-set')?.addEventListener('change', processSource);
+
+$('btn-fullcolor').addEventListener('click', function() {
+  isFullColorActive = !isFullColorActive;
+  this.classList.toggle('active', isFullColorActive);
+  this.title = isFullColorActive ? 'تعطيل التلوين — Disable Color' : 'تلوين كامل — Full Color Mode';
+  schedule();
+});
+
+$('edge-toggle').addEventListener('click', function() {
+  this.classList.toggle('active');
+  useEdgeDetection = this.classList.contains('active');
+  schedule();
+});
+
+/* ---------- LIVE MOTION ---------- */
+$('btn-live').addEventListener('click', async () => {
+  if (isLive) { stopLive(); return; }
+  stopVideoPlayback();
+  try {
+    liveVideo = document.createElement('video');
+    liveVideo.muted = true; liveVideo.playsInline = true; liveVideo.autoplay = true;
+    liveStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 } }, audio: false
+    });
+    liveVideo.srcObject = liveStream;
+    await liveVideo.play();
+    isLive = true;
+    $('btn-live').classList.add('live-active');
+    $('live-badge').style.display = 'flex';
+    $('placeholder-text').style.display = 'none';
+    lastLive = 0;
+    liveRAF = requestAnimationFrame(liveLoop);
+  } catch (err) {
+    console.error(err);
+    alert('تعذر الوصول إلى الكاميرا — تحقق من الأذونات');
+  }
+});
+
+function stopLive() {
+  isLive = false;
+  if (liveRAF) cancelAnimationFrame(liveRAF);
+  if (liveStream) liveStream.getTracks().forEach(t => t.stop());
+  $('btn-live').classList.remove('live-active');
+  $('live-badge').style.display = 'none';
+  if (currentImg || currentVideo) processSource();
+  else {
+    $('output').style.display = 'none';
+    $('placeholder-text').style.display = 'flex';
+  }
+}
+
+function liveLoop(ts) {
+  if (!isLive) return;
+  liveRAF = requestAnimationFrame(liveLoop);
+  if (ts - lastLive < 33) return;
+  lastLive = ts;
+  if (liveVideo.readyState >= 2) {
+    const resVal = Math.min(160, parseInt($('resolution')?.value || '130'));
+    const conVal = parseFloat($('contrast')?.value || '1.5');
+    const brVal = parseInt($('brightness')?.value || '0');
+    const gmVal = parseFloat($('gamma')?.value || '1.0');
+    const setVal = $('char-set')?.value || 'detailed';
+
+    const g = sampleGridAdvanced(liveVideo, resVal, conVal, brVal, gmVal, useEdgeDetection, true);
+    if (!g) return;
+    const out = $('output');
+    out.textContent = asciiFromGrid(g, null, setVal);
+    const { tc } = getThemeColors();
+    out.style.color = tc;
+    out.style.display = 'block';
+  }
+}
+
+/* ---------- Theme Toggle ---------- */
+$('btn-theme').addEventListener('click', () => {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  if (!isFullColorActive) {
+    const { tc } = getThemeColors();
+    if (isLive) $('output').style.color = tc; else processSource();
+  }
+});
+
+/* ---------- Image Upload ---------- */
+const loadFile = f => {
+  if (!f || !f.type.startsWith('image/')) return;
+  stopLive();
+  stopVideoPlayback();
+  const r = new FileReader();
+  r.onload = e => { const i = new Image(); i.onload = () => { currentImg = i; currentVideo = null; processSource(); }; i.src = e.target.result; };
+  r.readAsDataURL(f);
+};
+$('file-input').addEventListener('change', e => loadFile(e.target.files[0]));
+
+/* ---------- Video Upload ---------- */
+const loadVideo = f => {
+  if (!f || !f.type.startsWith('video/')) return;
+  stopLive();
+  stopVideoPlayback();
+  const video = $('video-preview');
+  video.src = URL.createObjectURL(f);
+  video.muted = false;
+  video.style.display = 'none';
+  video.onloadeddata = () => {
+    currentVideo = video;
+    currentImg = null;
+    video.play();
+    video.volume = parseInt($('volume')?.value || '100') / 100;
+    startVideoPlayback();
+    $('placeholder-text').style.display = 'none';
+  };
+};
+$('video-input').addEventListener('change', e => loadVideo(e.target.files[0]));
+
+$('volume')?.addEventListener('input', function() {
+  const vol = parseInt(this.value) / 100;
+  if (currentVideo) currentVideo.volume = vol;
+  if (liveVideo) liveVideo.volume = vol;
+});
+
+function startVideoPlayback() {
+  if (videoPlaybackInterval) clearInterval(videoPlaybackInterval);
+  videoPlaybackInterval = setInterval(() => {
+    if (currentVideo && !currentVideo.paused && currentVideo.readyState >= 2) {
+      processSource();
+    }
+  }, 1000 / FPS);
+}
+
+function stopVideoPlayback() {
+  if (videoPlaybackInterval) clearInterval(videoPlaybackInterval);
+  videoPlaybackInterval = null;
+  const video = $('video-preview');
+  if (video) {
+    video.pause();
+    video.style.display = 'none';
+    video.src = '';
+  }
+  currentVideo = null;
+}
+
+/* ---------- Drag & Drop ---------- */
+const dz = $('drop-zone');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.opacity = '.8'; }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.opacity = '1'; }));
+dz.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFile(f);
+  else if (f && f.type.startsWith('video/')) loadVideo(f);
+});
+
+/* ---------- Progress Bar ---------- */
+const showProgress = v => { $('progress-container').style.display = 'block'; $('progress-bar').style.width = v + '%'; };
+const hideProgress = () => { $('progress-bar').style.width = '0%'; $('progress-container').style.display = 'none'; };
+
+/* ---------- Recorder Helper ---------- */
+function makeRecorder(canvas, onDone) {
+  let mime = 'video/webm;codecs=vp9';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/mp4';
+  const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+  const rec = new MediaRecorder(canvas.captureStream(FPS), { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => onDone(new Blob(chunks, { type: mime }), ext);
+  return rec;
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ---------- VIDEO Export: Density Sweep (Still Image) ---------- */
+async function exportSweepVideo() {
+  try {
+    const src = currentImg;
+    if (!src) throw new Error('لا توجد صورة للتصدير');
+    const conVal = parseFloat($('contrast')?.value || '1.5');
+    const brVal = parseInt($('brightness')?.value || '0');
+    const gmVal = parseFloat($('gamma')?.value || '1.0');
+    const setVal = $('char-set')?.value || 'detailed';
+
+    const g = sampleGridAdvanced(src, ANIM_COLUMNS, conVal, brVal, gmVal, useEdgeDetection);
+    if (!g) throw new Error('فشل معالجة الشبكة');
+    const { tc, bg } = getThemeColors();
+    const fontSize = 14, pad = 60;
+    const W = Math.ceil(g.w * fontSize * 0.6) + pad * 2;
+    const H = g.h * fontSize + pad * 2 + 40;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+
+    const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-MOTION.${ext}`));
+    paintAscii(ctx, W, H, asciiFromGrid(g, 1, setVal), tc, bg, fontSize, pad, true, null, 0, 0, false);
+    rec.start();
+
+    for (let i = 0; i < FRAMES; i++) {
+      const t = i / (FRAMES - 1);
+      const pp = t < .5 ? t * 2 : 2 - t * 2;
+      paintAscii(ctx, W, H, asciiFromGrid(g, 0.5 + pp * 2.5, setVal), tc, bg, fontSize, pad, true, null, 0, 0, false);
+      showProgress(Math.round(((i + 1) / FRAMES) * 100));
+      await sleep(1000 / FPS);
+    }
+    rec.stop();
+    await new Promise(r => setTimeout(r, 300));
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
+  }
+}
+
+/* ---------- VIDEO Export: Live Camera ---------- */
+async function exportLiveVideo() {
+  try {
+    const { tc, bg } = getThemeColors();
+    const con = parseFloat($('contrast')?.value || '1.5');
+    const br = parseInt($('brightness')?.value || '0');
+    const gm = parseFloat($('gamma')?.value || '1.0');
+    const set = $('char-set')?.value || 'detailed';
+    const cols = ANIM_COLUMNS;
+    const sw = liveVideo.videoWidth, sh = liveVideo.videoHeight;
+    const rows = Math.floor(cols * (sh / sw) * 0.5);
+    const fontSize = 14, pad = 60;
+    const W = Math.ceil(cols * fontSize * 0.6) + pad * 2;
+    const H = rows * fontSize + pad * 2 + 40;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+
+    const total = FPS * 3;
+    const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-LIVE.${ext}`));
+    rec.start();
+
+    for (let i = 0; i < total; i++) {
+      const g = sampleGridAdvanced(liveVideo, cols, con, br, gm, useEdgeDetection, true);
+      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, 0, 0, false);
+      showProgress(Math.round(((i + 1) / total) * 100));
+      await sleep(1000 / FPS);
+    }
+    rec.stop();
+    await new Promise(r => setTimeout(r, 300));
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
+  }
+}
+
+/* ---------- VIDEO Export: Uploaded Video File ---------- */
+async function exportVideoFile() {
+  try {
+    if (!currentVideo) throw new Error('لم يتم تحميل فيديو');
+    const { tc, bg } = getThemeColors();
+    const con = parseFloat($('contrast')?.value || '1.5');
+    const br = parseInt($('brightness')?.value || '0');
+    const gm = parseFloat($('gamma')?.value || '1.0');
+    const set = $('char-set')?.value || 'detailed';
+    const cols = ANIM_COLUMNS;
+    const video = currentVideo;
+    
+    const sw = video.videoWidth, sh = video.videoHeight;
+    const rows = Math.floor(cols * (sh / sw) * 0.5);
+    const fontSize = 14, pad = 60;
+    const W = Math.ceil(cols * fontSize * 0.6) + pad * 2;
+    const H = rows * fontSize + pad * 2 + 40;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+
+    const duration = video.duration * 1000;
+    const totalFrames = Math.min(Math.floor(duration / (1000 / FPS)), 300);
+    const frameInterval = duration / totalFrames;
+    
+    const rec = makeRecorder(c, (blob, ext) => saveBlob(blob, `FX-PRODUCTION-VIDEO.${ext}`));
+    rec.start();
+    
+    video.currentTime = 0;
+    video.pause();
+    
+    for (let i = 0; i < totalFrames; i++) {
+      video.currentTime = (i * frameInterval) / 1000;
+      await new Promise(resolve => {
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          resolve();
+        };
+        video.addEventListener('seeked', onSeeked);
+      });
+      
+      const g = sampleGridAdvanced(video, cols, con, br, gm, useEdgeDetection);
+      if (g) paintAscii(ctx, W, H, asciiFromGrid(g, null, set), tc, bg, fontSize, pad, true, null, 0, 0, false);
+      showProgress(Math.round(((i + 1) / totalFrames) * 100));
+      await sleep(1000 / FPS);
+    }
+    
+    rec.stop();
+    await new Promise(r => setTimeout(r, 300));
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
+  }
+}
+
+/* ---------- STATIC EXPORT (PNG/JPG/PDF) ---------- */
+function exportStatic(format) {
+  try {
+    const src = isLive ? liveVideo : (currentVideo || currentImg);
+    if (!src) throw new Error('لا يوجد مصدر متاح للتصدير');
+    
+    const scale = parseFloat($('export-resolution')?.value || '1.5');
+    const baseCols = parseInt($('resolution')?.value || '130');
+    const cols = Math.floor(baseCols * scale);
+    
+    const { tc, bg } = getThemeColors();
+    const conVal = parseFloat($('contrast')?.value || '1.5');
+    const brVal = parseInt($('brightness')?.value || '0');
+    const gmVal = parseFloat($('gamma')?.value || '1.0');
+    const setVal = $('char-set')?.value || 'detailed';
+
+    const g = sampleGridAdvanced(src, cols, conVal, brVal, gmVal, useEdgeDetection, isLive);
+    if (!g) throw new Error('فشل معالجة الصورة للتصدير');
+    
+    const text = asciiFromGrid(g, null, setVal);
+    const lines = text.split('\n');
+    
+    const pad = 200;
+    const meas = document.createElement('canvas').getContext('2d');
+    const baseFont = 10;
+    meas.font = `${baseFont}px ${MONO_FONT}`;
+    const baseW = meas.measureText(lines[0]).width || 1;
+    const fontSize = Math.max(8, Math.floor(baseFont * (TARGET_WIDTH - pad * 2) / baseW));
+    
+    meas.font = `${fontSize}px ${MONO_FONT}`;
+    const W = Math.ceil(meas.measureText(lines[0]).width) + pad * 2;
+    const H = Math.ceil(lines.length * fontSize) + pad * 2 + 80;
+    
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    
+    paintAscii(c.getContext('2d'), c.width, c.height, text,
+      tc, bg, fontSize, pad, true, 
+      isFullColorActive && g ? g.rgbGrid : null, isFullColorActive && g ? g.h : 0, isFullColorActive && g ? g.w : 0, isFullColorActive);
+    
+    if (format === 'pdf') {
+      if (typeof window.jspdf === 'undefined') {
+        throw new Error('مكتبة PDF غير محملة. يرجى التحقق من الاتصال بالإنترنت.');
+      }
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: c.width > c.height ? 'l' : 'p', unit: 'px', format: [c.width, c.height], compress: true });
+      pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, c.width, c.height);
+      pdf.save('FX-PRODUCTION-ASCII.pdf');
+      return;
+    }
+    
+    c.toBlob(blob => {
+      if (!blob) throw new Error('فشل إنشاء الصورة');
+      saveBlob(blob, `FX-PRODUCTION-${format.toUpperCase()}.${format}`);
+    }, format === 'jpg' ? 'image/jpeg' : 'image/png', 0.95);
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`خطأ في التصدير: ${err.message || err}`);
+  }
+}
+
+/* ---------- Main Download Handler ---------- */
+$('btn-download').addEventListener('click', async () => {
+  if ((!currentImg && !currentVideo && !isLive)) return alert('⚠️ حمّل صورة أو فيديو أو شغّل الكاميرا أولاً');
+  const format = $('export-format')?.value || 'png';
+  const btn = $('btn-download');
+  btn.disabled = true;
+
+  try {
+    if (format === 'video') {
+      if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) {
+        throw new Error('المتصفح لا يدعم تسجيل الفيديو');
+      } else if (isLive) {
+        await exportLiveVideo();
+      } else if (currentVideo) {
+        await exportVideoFile();
+      } else {
+        await exportSweepVideo();
+      }
+    } else {
+      exportStatic(format);
+    }
+  } catch (err) {
+    console.error('Export error:', err);
+    alert(`حدث خطأ أثناء التصدير: ${err.message || err}`);
+  }
+
+  btn.disabled = false;
+  setTimeout(hideProgress, 800);
+});
+
+/* ---------- Fullscreen Toggle ---------- */
+let isFullscreen = false;
+$('btn-fullscreen').addEventListener('click', function() {
+  isFullscreen = !isFullscreen;
+  document.body.classList.toggle('fullscreen-mode', isFullscreen);
+  this.innerHTML = isFullscreen 
+    ? '<svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/><polyline points="9 9 3 3 9 3"/><polyline points="15 15 21 21 15 21"/><polyline points="9 15 3 21 9 21"/></svg>';
+  this.title = isFullscreen ? 'خروج من ملء الشاشة — Exit Fullscreen' : 'ملء الشاشة — Full Screen';
+});
+
+$('btn-exit-fullscreen').addEventListener('click', function() {
+  if (isFullscreen) {
+    $('btn-fullscreen').click();
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (isFullscreen && (e.key === 'Escape' || e.key === 'F11')) {
+    e.preventDefault();
+    $('btn-exit-fullscreen').click();
+  }
+});
+
+$('video-preview').style.display = 'none';
+</script>
+</body>
+</html>
